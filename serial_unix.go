@@ -6,7 +6,7 @@
 
 // +build linux darwin freebsd openbsd
 
-package serial // import "go.bug.st/serial.v1"
+package serial
 
 import (
 	"io/ioutil"
@@ -84,37 +84,6 @@ func (port *unixPort) Read(p []byte) (int, error) {
 
 	size, read := len(p), 0
 	fds := unixutils.NewFDSet(port.handle, port.closeSignal.ReadFD())
-	buf := make([]byte, size)
-
-	now := time.Now()
-	deadline := now.Add(time.Duration(port.readTimeout) * time.Millisecond)
-
-	for read < size {
-		res, err := unixutils.Select(fds, nil, fds, deadline.Sub(now))
-		if err != nil {
-			return read, err
-		}
-		if res.IsReadable(port.closeSignal.ReadFD()) {
-			return read, &PortError{code: PortClosed}
-		}
-		if !res.IsReadable(port.handle) {
-			break
-		}
-		n, err := unix.Read(port.handle, buf)
-		// read should always return some data as select reported it was ready to read when we get to this point.
-		if err == nil && n == 0 {
-			err = &PortError{code: ReadFailed}
-		}
-		if err != nil {
-			return read, err
-		}
-		copy(p[read:], buf[:n])
-		read += n
-
-		now = time.Now()
-		if !now.Before(deadline) || port.firstByteTimeout {
-			break
-		}
 	}
 	return read, nil
 }
@@ -300,7 +269,7 @@ func nativeOpen(portName string, mode *Mode) (*unixPort, error) {
 	}
 
 	// Set raw mode
-	setRawMode(settings)
+	setRawMode(settings, mode)
 
 	// Explicitly disable RTS/CTS flow control
 	setTermSettingsCtsRts(false, settings)
@@ -460,7 +429,7 @@ func setTermSettingsCtsRts(enable bool, settings *unix.Termios) {
 	}
 }
 
-func setRawMode(settings *unix.Termios) {
+func setRawMode(settings *unix.Termios, mode *Mode) {
 	// Set local mode
 	settings.Cflag |= unix.CREAD
 	settings.Cflag |= unix.CLOCAL
@@ -493,9 +462,14 @@ func setRawMode(settings *unix.Termios) {
 
 	settings.Oflag &^= unix.OPOST
 
-	// Block reads until at least one char is available (no timeout)
-	settings.Cc[unix.VMIN] = 1
-	settings.Cc[unix.VTIME] = 0
+	if mode.Vmin == 0 && mode.Vtimeout == 0 {
+		// Switch to default mode
+		// Block reads until at least one char is available (no timeout)
+		mode.Vmin = 1
+	}
+
+	settings.Cc[unix.VMIN] = mode.Vmin
+	settings.Cc[unix.VTIME] = mode.Vtimeout
 }
 
 func setTermSettingsInterbyteTimeout(timeout int, settings *unix.Termios) error {

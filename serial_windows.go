@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file.
 //
 
-package serial // import "go.bug.st/serial.v1"
+package serial
 
 /*
 
@@ -392,24 +392,13 @@ func (port *windowsPort) SetReadTimeout(t int) error {
 		port.timeouts.ReadTotalTimeoutMultiplier = 0
 		port.timeouts.ReadTotalTimeoutConstant = uint32(t)
 	}
-	return port.reconfigurePort()
-}
 
-func (port *windowsPort) SetReadTimeoutEx(t, i uint32) error {
-	port.timeouts.ReadIntervalTimeout = i
-	port.timeouts.ReadTotalTimeoutMultiplier = 0
-	port.timeouts.ReadTotalTimeoutConstant = t
-	return port.reconfigurePort()
-}
-
-func (port *windowsPort) SetFirstByteReadTimeout(t uint32) error {
-	if t > 0 && t < 0xFFFFFFFF {
-		port.timeouts.ReadIntervalTimeout = 0xFFFFFFFF
-		port.timeouts.ReadTotalTimeoutMultiplier = 0xFFFFFFFF
-		port.timeouts.ReadTotalTimeoutConstant = t
-		return port.reconfigurePort()
-	} else {
-		return &PortError{code: InvalidTimeoutValue}
+	// Set timeouts to 1 second
+	timeouts := &commTimeouts{
+		ReadIntervalTimeout:         0xFFFFFFFF,
+		ReadTotalTimeoutMultiplier:  0xFFFFFFFF,
+		ReadTotalTimeoutConstant:    1000, // 1 sec
+		WriteTotalTimeoutConstant:   0,
 	}
 }
 
